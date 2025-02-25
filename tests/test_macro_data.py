@@ -12,8 +12,8 @@ from unittest.mock import patch, MagicMock, call
 # Add the src directory to the Python path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.macro_data_collection import MacroDataCollector
-from src.config import MACRO_DATA_SOURCES
+from src.data.macro_collection import MacroDataCollector
+from src.core.config import MACRO_DATA_SOURCES
 
 
 class TestMacroDataCollector:
@@ -94,12 +94,13 @@ class TestMacroDataCollector:
         # Create mock config
         config = {
             'function': 'ak.macro_china_gdp_yearly',
-            'filename': str(cache_file.name),
+            'filename': 'china_gdp_yearly.csv',  # Just the filename, not the full path
             'description': "Test GDP data"
         }
         
-        # Mock is_cache_valid to return True
-        with patch.object(collector, 'is_cache_valid', return_value=True):
+        # Mock is_cache_valid to return True and patch MACRO_DATA_DIR
+        with patch.object(collector, 'is_cache_valid', return_value=True), \
+             patch('src.data.macro_collection.MACRO_DATA_DIR', tmp_path):
             # Mock pd.read_csv to return our sample data
             with patch('pandas.read_csv', return_value=sample_gdp_data) as mock_read_csv:
                 result = collector.fetch_single_source('gdp', config)
@@ -107,7 +108,7 @@ class TestMacroDataCollector:
                 # Verify result
                 assert result is not None
                 assert result.equals(sample_gdp_data)
-                mock_read_csv.assert_called_once_with(cache_file)
+                mock_read_csv.assert_called_once_with(tmp_path / 'china_gdp_yearly.csv')
     
     def test_fetch_single_source_fresh_data(self, tmp_path, mock_ak_module, sample_gdp_data):
         """Test fetching fresh data for a single source."""
@@ -127,7 +128,7 @@ class TestMacroDataCollector:
         # Ensure we don't use cache
         with patch.object(collector, 'is_cache_valid', return_value=False):
             # Mock Path location
-            with patch('src.macro_data_collection.MACRO_DATA_DIR', cache_dir):
+            with patch('src.data.macro_collection.MACRO_DATA_DIR', cache_dir):
                 result = collector.fetch_single_source('gdp', config)
                 
                 # Verify result
@@ -209,15 +210,19 @@ class TestMacroDataCollector:
         """Test get_data for all sources."""
         # Setup
         collector = MacroDataCollector()
-        
+
         # Mock fetch_all_sources
         mock_results = {'gdp': pd.DataFrame({'test': [1, 2, 3]})}
         with patch.object(collector, 'fetch_all_sources', return_value=mock_results) as mock_fetch:
             results = collector.get_data()
-            
+
             # Verify results
             assert results == mock_results
-            mock_fetch.assert_called_once_with(force_refresh=False)
+            # More flexible assertion that works with both positional and keyword arguments
+            assert mock_fetch.call_count == 1
+            # Verify the argument value without being strict about positional vs. keyword
+            call_args = mock_fetch.call_args
+            assert call_args[0] == (False,) or call_args[1] == {'force_refresh': False}
     
     def test_get_data_single_source(self, mock_ak_module, sample_gdp_data):
         """Test get_data for a single source."""

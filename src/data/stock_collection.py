@@ -1,4 +1,4 @@
-# src/data_collection.py
+# src/data/stock_collection.py
 
 import os
 import time
@@ -15,8 +15,8 @@ from functools import lru_cache
 
 # Try to import using relative imports if running as a module
 try:
-    from src.utils import calculate_technical_indicators
-    from src.config import (
+    from src.core.utils import calculate_technical_indicators
+    from src.core.config import (
         START_DATE, END_DATE, DEFAULT_TICKER_BS,
         RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR,
         BATCH_SIZE, MAX_WORKERS, LOGGING_CONFIG,
@@ -24,8 +24,8 @@ try:
     )
 except ImportError:
     # Fall back to direct imports if running the file directly
-    from utils import calculate_technical_indicators
-    from config import (
+    from ..core.utils import calculate_technical_indicators
+    from ..core.config import (
         START_DATE, END_DATE, DEFAULT_TICKER_BS,
         RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR,
         BATCH_SIZE, MAX_WORKERS, LOGGING_CONFIG,
@@ -46,7 +46,8 @@ class StockDataCollector:
         end_date: str = END_DATE,
         batch_size: int = BATCH_SIZE,
         max_workers: int = MAX_WORKERS,
-        cache_expiry_days: int = CACHE_EXPIRY_DAYS
+        cache_expiry_days: int = CACHE_EXPIRY_DAYS,
+        indicators: Optional[List[str]] = None
     ):
         """
         Initialize the stock data collector.
@@ -58,6 +59,7 @@ class StockDataCollector:
             batch_size: Size of data chunks for parallel processing
             max_workers: Maximum number of worker threads
             cache_expiry_days: Number of days before cache expires
+            indicators: List of technical indicators to calculate
         """
         self.symbol = symbol
         self.start_date = start_date
@@ -65,6 +67,7 @@ class StockDataCollector:
         self.batch_size = batch_size
         self.max_workers = max_workers
         self.cache_expiry_days = cache_expiry_days
+        self.indicators = indicators
         
         # Initialize BaoStock session
         self.bs_session = None
@@ -293,14 +296,14 @@ class StockDataCollector:
                     data[col] = pd.to_numeric(data[col], errors='coerce')
 
             # Calculate technical indicators
-            processed_data = calculate_technical_indicators(data)
+            processed_data = calculate_technical_indicators(data, indicators=self.indicators)
 
             # Validate processed data
             if processed_data.isnull().sum().sum() > 0:
                 logger.warning(f"Processed data contains {processed_data.isnull().sum().sum()} missing values")
                 
-                # Fill NaN values for technical indicators (optional)
-                processed_data = processed_data.fillna(method='bfill').fillna(method='ffill')
+                # Fill NaN values for technical indicators (updated to use bfill() and ffill())
+                processed_data = processed_data.bfill().ffill()
 
             # Save processed data efficiently
             processed_file_path = PROCESSED_DATA_DIR / f'{self.symbol}_processed_stock_data.csv'

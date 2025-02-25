@@ -1,4 +1,4 @@
-# src/clean_data.py
+# src/data/cleaner.py
 
 import os
 import argparse
@@ -8,10 +8,10 @@ from pathlib import Path
 
 # Try to import using relative imports if running as a module
 try:
-    from src.config import DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR, MACRO_DATA_DIR, LOGGING_CONFIG
+    from src.core.config import DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR, MACRO_DATA_DIR, LOGGING_CONFIG
 except ImportError:
     # Fall back to direct imports if running the file directly
-    from config import DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR, MACRO_DATA_DIR, LOGGING_CONFIG
+    from ..core.config import DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR, MACRO_DATA_DIR, LOGGING_CONFIG
 
 # Configure basic logging
 logging.basicConfig(

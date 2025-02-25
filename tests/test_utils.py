@@ -6,12 +6,13 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+import logging
 
 # Add the src directory to the Python path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.utils import IndicatorCalculator, calculate_technical_indicators
-from src.config import TECHNICAL_INDICATORS_CONFIG
+from src.core.utils import IndicatorCalculator, calculate_technical_indicators
+from src.core.config import TECHNICAL_INDICATORS_CONFIG
 
 
 class TestIndicatorCalculator:
@@ -47,7 +48,7 @@ class TestIndicatorCalculator:
         calculator = IndicatorCalculator(custom_config)
         assert calculator.config == custom_config
     
-    def test_validate_dataframe(self, sample_price_data):
+    def test_validate_dataframe(self, sample_price_data, caplog):
         """Test DataFrame validation."""
         calculator = IndicatorCalculator()
         
@@ -65,9 +66,12 @@ class TestIndicatorCalculator:
         df_with_nan = sample_price_data.copy()
         df_with_nan.loc[df_with_nan.index[0:3], 'close'] = np.nan
         
-        with pytest.warns(Warning):  # Or check caplog depending on how warning is issued
+        # Use caplog to check the log message instead of pytest.warns
+        with caplog.at_level(logging.WARNING):
             result = calculator.validate_dataframe(df_with_nan)
             assert len(result) == len(sample_price_data) - 3
+            # Verify the warning was logged
+            assert "Dropped" in caplog.text and "NaN close prices" in caplog.text
     
     def test_calculate_sma(self, sample_price_data):
         """Test SMA calculation."""
@@ -281,7 +285,7 @@ class TestCalculateTechnicalIndicators:
     
     def test_calculate_technical_indicators_handles_exceptions(self, sample_price_data):
         """Test that the function handles exceptions properly."""
-        with patch('src.utils.IndicatorCalculator.calculate_sma', side_effect=Exception('Test error')):
+        with patch('src.core.utils.IndicatorCalculator.calculate_sma', side_effect=Exception('Test error')):
             # Should not raise exception
             result = calculate_technical_indicators(sample_price_data, indicators=['sma'])
             assert 'SMA_20' not in result.columns

@@ -1,4 +1,4 @@
-# src/macro_data_collection.py
+# src/data/macro_collection.py
 
 import argparse
 import importlib
@@ -13,10 +13,10 @@ from datetime import datetime, timedelta
 
 # Try to import using relative imports if running as a module
 try:
-    from src.config import MACRO_DATA_DIR, MACRO_DATA_SOURCES, LOGGING_CONFIG, CACHE_EXPIRY_DAYS
+    from src.core.config import MACRO_DATA_DIR, MACRO_DATA_SOURCES, LOGGING_CONFIG, CACHE_EXPIRY_DAYS
 except ImportError:
     # Fall back to direct imports if running the file directly
-    from config import MACRO_DATA_DIR, MACRO_DATA_SOURCES, LOGGING_CONFIG, CACHE_EXPIRY_DAYS
+    from ..core.config import MACRO_DATA_DIR, MACRO_DATA_SOURCES, LOGGING_CONFIG, CACHE_EXPIRY_DAYS
 
 # Configure logging
 logging.config.dictConfig(LOGGING_CONFIG)

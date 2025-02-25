@@ -1,4 +1,4 @@
-# src/utils.py
+# src\core\utils.py
 
 from typing import Optional, List, Dict, Tuple, Any, Union, Callable
 import pandas as pd
@@ -10,10 +10,10 @@ from functools import lru_cache
 
 # Try to import using relative imports if running as a module
 try:
-    from src.config import TECHNICAL_INDICATORS_CONFIG, LOGGING_CONFIG
+    from src.core.config import TECHNICAL_INDICATORS_CONFIG, LOGGING_CONFIG
 except ImportError:
     # Fall back to direct imports if running the file directly
-    from config import TECHNICAL_INDICATORS_CONFIG, LOGGING_CONFIG
+    from ..core.config import TECHNICAL_INDICATORS_CONFIG, LOGGING_CONFIG
 
 # Configure logging
 logging.config.dictConfig(LOGGING_CONFIG)
@@ -246,6 +246,175 @@ class IndicatorCalculator:
             empty_series = pd.Series(index=df.index)
             return empty_series, empty_series
 
+    def calculate_obv(self, df: pd.DataFrame) -> pd.Series:
+        """
+        Calculate On-Balance Volume (OBV).
+        
+        Args:
+            df: DataFrame containing price and volume data
+            
+        Returns:
+            Series containing OBV values
+        """
+        try:
+            if 'volume' not in df.columns:
+                logger.warning("Volume data not available for OBV calculation")
+                return pd.Series(index=df.index)
+                
+            return ta.volume.OnBalanceVolumeIndicator(df['close'], df['volume']).on_balance_volume()
+        except Exception as e:
+            logger.error(f"Error calculating OBV: {e}", exc_info=True)
+            return pd.Series(index=df.index)
+    
+    def calculate_adx(self, df: pd.DataFrame, period: Optional[int] = None) -> pd.Series:
+        """
+        Calculate Average Directional Index (ADX).
+        
+        Args:
+            df: DataFrame containing price data
+            period: Period for ADX calculation
+            
+        Returns:
+            Series containing ADX values
+        """
+        period = period or self.config.get('adx_period', 14)
+        try:
+            if not all(col in df.columns for col in ['high', 'low', 'close']):
+                logger.warning("Required columns missing for ADX calculation")
+                return pd.Series(index=df.index)
+                
+            return ta.trend.ADXIndicator(df['high'], df['low'], df['close'], window=period).adx()
+        except Exception as e:
+            logger.error(f"Error calculating ADX: {e}", exc_info=True)
+            return pd.Series(index=df.index)
+    
+    def calculate_cci(self, df: pd.DataFrame, period: Optional[int] = None) -> pd.Series:
+        """
+        Calculate Commodity Channel Index (CCI).
+        
+        Args:
+            df: DataFrame containing price data
+            period: Period for CCI calculation
+            
+        Returns:
+            Series containing CCI values
+        """
+        period = period or self.config.get('cci_period', 20)
+        try:
+            if not all(col in df.columns for col in ['high', 'low', 'close']):
+                logger.warning("Required columns missing for CCI calculation")
+                return pd.Series(index=df.index)
+                
+            return ta.trend.CCIIndicator(df['high'], df['low'], df['close'], window=period).cci()
+        except Exception as e:
+            logger.error(f"Error calculating CCI: {e}", exc_info=True)
+            return pd.Series(index=df.index)
+    
+    def calculate_mfi(self, df: pd.DataFrame, period: Optional[int] = None) -> pd.Series:
+        """
+        Calculate Money Flow Index (MFI).
+        
+        Args:
+            df: DataFrame containing price and volume data
+            period: Period for MFI calculation
+            
+        Returns:
+            Series containing MFI values
+        """
+        period = period or self.config.get('mfi_period', 14)
+        try:
+            if not all(col in df.columns for col in ['high', 'low', 'close', 'volume']):
+                logger.warning("Required columns missing for MFI calculation")
+                return pd.Series(index=df.index)
+                
+            return ta.volume.MFIIndicator(df['high'], df['low'], df['close'], df['volume'], window=period).money_flow_index()
+        except Exception as e:
+            logger.error(f"Error calculating MFI: {e}", exc_info=True)
+            return pd.Series(index=df.index)
+            
+    def calculate_williams_r(self, df: pd.DataFrame, period: Optional[int] = None) -> pd.Series:
+        """
+        Calculate Williams %R.
+        
+        Args:
+            df: DataFrame containing price data
+            period: Period for Williams %R calculation
+            
+        Returns:
+            Series containing Williams %R values
+        """
+        period = period or self.config.get('williams_r_period', 14)
+        try:
+            if not all(col in df.columns for col in ['high', 'low', 'close']):
+                logger.warning("Required columns missing for Williams %R calculation")
+                return pd.Series(index=df.index)
+                
+            return ta.momentum.WilliamsRIndicator(df['high'], df['low'], df['close'], lbp=period).williams_r()
+        except Exception as e:
+            logger.error(f"Error calculating Williams %R: {e}", exc_info=True)
+            return pd.Series(index=df.index)
+    
+    def calculate_psar(self, df: pd.DataFrame) -> pd.Series:
+        """
+        Calculate Parabolic SAR.
+        
+        Args:
+            df: DataFrame containing price data
+            
+        Returns:
+            Series containing Parabolic SAR values
+        """
+        try:
+            if not all(col in df.columns for col in ['high', 'low', 'close']):
+                logger.warning("Required columns missing for PSAR calculation")
+                return pd.Series(index=df.index)
+                
+            step = self.config.get('psar_step', 0.02)
+            max_step = self.config.get('psar_max_step', 0.2)
+            return ta.trend.PSARIndicator(df['high'], df['low'], df['close'], step=step, max_step=max_step).psar()
+        except Exception as e:
+            logger.error(f"Error calculating Parabolic SAR: {e}", exc_info=True)
+            return pd.Series(index=df.index)
+    
+    def calculate_ichimoku(self, df: pd.DataFrame) -> Tuple[pd.Series, pd.Series, pd.Series, pd.Series, pd.Series]:
+        """
+        Calculate Ichimoku Cloud components.
+        
+        Args:
+            df: DataFrame containing price data
+            
+        Returns:
+            Tuple of Series containing Ichimoku components
+        """
+        try:
+            if not all(col in df.columns for col in ['high', 'low', 'close']):
+                logger.warning("Required columns missing for Ichimoku calculation")
+                empty_series = pd.Series(index=df.index)
+                return empty_series, empty_series, empty_series, empty_series, empty_series
+            
+            conv_window = self.config.get('ichimoku_conv_window', 9)
+            base_window = self.config.get('ichimoku_base_window', 26)
+            span_window = self.config.get('ichimoku_span_window', 52)
+            
+            indicator = ta.trend.IchimokuIndicator(
+                df['high'], df['low'], 
+                window1=conv_window, 
+                window2=base_window, 
+                window3=span_window
+            )
+            
+            return (
+                indicator.ichimoku_conversion_line(), 
+                indicator.ichimoku_base_line(),
+                indicator.ichimoku_a(), 
+                indicator.ichimoku_b(),
+                indicator.ichimoku_conversion_line() - indicator.ichimoku_base_line()  # Custom signal line
+            )
+        except Exception as e:
+            logger.error(f"Error calculating Ichimoku Cloud: {e}", exc_info=True)
+            empty_series = pd.Series(index=df.index)
+            return empty_series, empty_series, empty_series, empty_series, empty_series
+
     @lru_cache(maxsize=32)
     def get_indicator_function(self, indicator_name: str) -> Callable:
         """
@@ -264,7 +433,14 @@ class IndicatorCalculator:
             'macd': self.calculate_macd,
             'bollinger': self.calculate_bollinger_bands,
             'atr': self.calculate_atr,
-            'stochastic': self.calculate_stochastic
+            'stochastic': self.calculate_stochastic,
+            'obv': self.calculate_obv,
+            'adx': self.calculate_adx,
+            'cci': self.calculate_cci,
+            'mfi': self.calculate_mfi,
+            'williams_r': self.calculate_williams_r,
+            'psar': self.calculate_psar,
+            'ichimoku': self.calculate_ichimoku
         }
         
         indicator_name = indicator_name.lower()
@@ -286,7 +462,8 @@ def calculate_technical_indicators(
     Args:
         df: DataFrame containing price data
         indicators: List of indicators to calculate. If None, calculates all.
-                   Options: ['sma', 'ema', 'rsi', 'macd', 'bollinger', 'atr', 'stochastic']
+                   Options: ['sma', 'ema', 'rsi', 'macd', 'bollinger', 'atr', 'stochastic', 
+                             'obv', 'adx', 'cci', 'mfi', 'williams_r', 'psar', 'ichimoku']
         config: Dictionary containing parameters for technical indicators
     
     Returns:
@@ -313,7 +490,13 @@ def calculate_technical_indicators(
             'sma': ('SMA_{period}', calculator.calculate_sma),
             'ema': ('EMA_{period}', calculator.calculate_ema),
             'rsi': ('RSI_{period}', calculator.calculate_rsi),
-            'atr': ('ATR_14', lambda df: calculator.calculate_atr(df))
+            'atr': ('ATR_14', lambda df: calculator.calculate_atr(df)),
+            'obv': ('OBV', calculator.calculate_obv),
+            'adx': ('ADX_{period}', calculator.calculate_adx),
+            'cci': ('CCI_{period}', calculator.calculate_cci),
+            'mfi': ('MFI_{period}', calculator.calculate_mfi),
+            'williams_r': ('Williams_R_{period}', calculator.calculate_williams_r),
+            'psar': ('PSAR', calculator.calculate_psar)
         }
         
         for ind_name, (column_pattern, func) in standard_indicators.items():
@@ -352,8 +535,20 @@ def calculate_technical_indicators(
             except Exception as e:
                 logger.error(f"Error adding Stochastic indicator: {e}", exc_info=True)
         
-        # Fill any NaN values with appropriate methods
-        result_df = result_df.fillna(method='bfill').fillna(method='ffill')
+        # Add Ichimoku Cloud components
+        if 'ichimoku' in indicators:
+            try:
+                conv, base, span_a, span_b, signal = calculator.calculate_ichimoku(df)
+                result_df['Ichimoku_Conversion'] = conv
+                result_df['Ichimoku_Base'] = base
+                result_df['Ichimoku_SpanA'] = span_a
+                result_df['Ichimoku_SpanB'] = span_b
+                result_df['Ichimoku_Signal'] = signal
+            except Exception as e:
+                logger.error(f"Error adding Ichimoku indicator: {e}", exc_info=True)
+        
+        # Fill any NaN values with appropriate methods (updated to use bfill() and ffill())
+        result_df = result_df.bfill().ffill()
         
         # Log successful calculation
         logger.info(f"Successfully calculated {len(indicators)} technical indicators")

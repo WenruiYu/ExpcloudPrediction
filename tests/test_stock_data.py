@@ -8,12 +8,13 @@ import numpy as np
 from pathlib import Path
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
+import logging
 
 # Add the src directory to the Python path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.data_collection import StockDataCollector
-from src.config import DEFAULT_TICKER_BS
+from src.data.stock_collection import StockDataCollector
+from src.core.config import DEFAULT_TICKER_BS, CACHE_DIR
 
 
 class TestStockDataCollector:
@@ -38,31 +39,6 @@ class TestStockDataCollector:
     def mock_bs_query(self):
         """Create a mock for BaoStock query_history_k_data_plus function."""
         with patch('baostock.query_history_k_data_plus') as mock:
-            # Create a mock result object
-            mock_result = MagicMock()
-            mock_result.error_code = '0'
-            
-            # Sample data for Moutai (SH.600519)
-            data = [
-                ['2023-01-01', 'sh.600519', '1800.0', '1850.0', '1790.0', '1830.0', '10000', '18300000'],
-                ['2023-01-02', 'sh.600519', '1830.0', '1880.0', '1820.0', '1860.0', '12000', '22320000'],
-                ['2023-01-03', 'sh.600519', '1860.0', '1900.0', '1850.0', '1890.0', '11000', '20790000'],
-            ]
-            
-            # Setup mock to return sample data
-            def next_side_effect():
-                if hasattr(mock_result, '_idx'):
-                    mock_result._idx += 1
-                else:
-                    mock_result._idx = 0
-                return mock_result._idx < len(data)
-                
-            def get_row_data_side_effect():
-                return data[mock_result._idx - 1]
-                
-            mock_result.next = MagicMock(side_effect=next_side_effect)
-            mock_result.get_row_data = MagicMock(side_effect=get_row_data_side_effect)
-            mock.return_value = mock_result
             yield mock
     
     @pytest.fixture
@@ -127,6 +103,29 @@ class TestStockDataCollector:
         """Test fetching stock data from BaoStock."""
         # Mock cache handling
         monkeypatch.setattr(StockDataCollector, 'is_cache_valid', lambda self, path: False)
+        
+        # Create a better mock for the query result class
+        class MockQueryResult:
+            def __init__(self):
+                self.error_code = '0'
+                self.error_msg = ''
+                self._idx = -1
+                # Sample data for Moutai
+                self.data = [
+                    ['2023-01-01', 'sh.600519', '1800.0', '1850.0', '1790.0', '1830.0', '10000', '18300000'],
+                    ['2023-01-02', 'sh.600519', '1830.0', '1880.0', '1820.0', '1860.0', '12000', '22320000'],
+                    ['2023-01-03', 'sh.600519', '1860.0', '1900.0', '1850.0', '1890.0', '11000', '20790000'],
+                ]
+                
+            def next(self):
+                self._idx += 1
+                return self._idx < len(self.data)
+                
+            def get_row_data(self):
+                return self.data[self._idx]
+        
+        # Replace the mock query result
+        mock_bs_query.return_value = MockQueryResult()
         
         with StockDataCollector(
             symbol='sh.600519',
@@ -217,7 +216,15 @@ class TestStockDataCollector:
     
     def test_get_data_with_cache(self, monkeypatch, sample_stock_data):
         """Test getting data with cache."""
-        collector = StockDataCollector()
+        # Create a collector with specific dates and symbol to get predictable cache path
+        collector = StockDataCollector(
+            symbol='sh.600519', 
+            start_date='2023-01-01', 
+            end_date='2023-01-03'
+        )
+        
+        # Expected cache file path
+        expected_cache_path = CACHE_DIR / 'sh.600519_2023-01-01_2023-01-03_cache.csv'
         
         # Mock methods
         monkeypatch.setattr(collector, 'fetch_stock_data', lambda: sample_stock_data)
@@ -228,12 +235,14 @@ class TestStockDataCollector:
         assert result is not None
         assert len(result) == 3
         
-        # Test with force refresh
-        with patch.object(os, 'remove') as mock_remove:
+        # Test with force refresh - patch path.exists to return True
+        with patch('pathlib.Path.exists', return_value=True), \
+             patch('os.remove') as mock_remove:
             result = collector.get_data(force_refresh=True)
             assert result is not None
             assert len(result) == 3
-            mock_remove.assert_called_once()
+            # Only verify that os.remove was called
+            assert mock_remove.call_count == 1
     
     def test_get_data_error_handling(self, monkeypatch):
         """Test error handling in get_data."""

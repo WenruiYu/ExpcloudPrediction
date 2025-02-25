@@ -1,4 +1,4 @@
-# src/config.py
+# src\core\config.py
 
 import os
 from pathlib import Path
@@ -10,8 +10,9 @@ def get_env_var(var_name: str, default_value: str) -> str:
     return os.environ.get(var_name, default_value)
 
 # Base paths
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = Path(get_env_var("DATA_DIR", str(BASE_DIR / 'data')))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # Project root directory
+BASE_DIR = Path(__file__).resolve().parent.parent  # src directory
+DATA_DIR = Path(get_env_var("DATA_DIR", str(PROJECT_ROOT / 'data')))  # data directory at project root
 RAW_DATA_DIR = DATA_DIR / 'raw'
 PROCESSED_DATA_DIR = DATA_DIR / 'processed'
 CACHE_DIR = DATA_DIR / 'cache'
@@ -53,7 +54,17 @@ TECHNICAL_INDICATORS_CONFIG: Dict[str, int] = {
     'rsi_period': int(get_env_var('RSI_PERIOD', '14')),
     'macd_fast': int(get_env_var('MACD_FAST', '12')),
     'macd_slow': int(get_env_var('MACD_SLOW', '26')),
-    'macd_signal': int(get_env_var('MACD_SIGNAL', '9'))
+    'macd_signal': int(get_env_var('MACD_SIGNAL', '9')),
+    # New indicator parameters
+    'adx_period': int(get_env_var('ADX_PERIOD', '14')),
+    'cci_period': int(get_env_var('CCI_PERIOD', '20')),
+    'mfi_period': int(get_env_var('MFI_PERIOD', '14')),
+    'williams_r_period': int(get_env_var('WILLIAMS_R_PERIOD', '14')),
+    'psar_step': float(get_env_var('PSAR_STEP', '0.02')),
+    'psar_max_step': float(get_env_var('PSAR_MAX_STEP', '0.2')),
+    'ichimoku_conv_window': int(get_env_var('ICHIMOKU_CONV_WINDOW', '9')),
+    'ichimoku_base_window': int(get_env_var('ICHIMOKU_BASE_WINDOW', '26')),
+    'ichimoku_span_window': int(get_env_var('ICHIMOKU_SPAN_WINDOW', '52'))
 }
 
 # Macro data sources configuration
