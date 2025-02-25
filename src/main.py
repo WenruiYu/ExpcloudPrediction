@@ -7,13 +7,24 @@ import logging.config
 import pandas as pd
 from typing import Dict, Any, Optional, List
 
-from config import (
-    LOGGING_CONFIG, START_DATE, END_DATE,
-    DEFAULT_TICKER_BS, MACRO_DATA_SOURCES
-)
-from data_collection import StockDataCollector
-from macro_data_collection import MacroDataCollector
-from utils import IndicatorCalculator
+# Try to import using relative imports if running as a module
+try:
+    from src.config import (
+        LOGGING_CONFIG, START_DATE, END_DATE,
+        DEFAULT_TICKER_BS, MACRO_DATA_SOURCES
+    )
+    from src.data_collection import StockDataCollector
+    from src.macro_data_collection import MacroDataCollector
+    from src.utils import IndicatorCalculator
+except ImportError:
+    # Fall back to direct imports if running the file directly
+    from config import (
+        LOGGING_CONFIG, START_DATE, END_DATE,
+        DEFAULT_TICKER_BS, MACRO_DATA_SOURCES
+    )
+    from data_collection import StockDataCollector
+    from macro_data_collection import MacroDataCollector
+    from utils import IndicatorCalculator
 
 # Configure logging
 logging.config.dictConfig(LOGGING_CONFIG)

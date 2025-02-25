@@ -82,6 +82,27 @@ python -m src.main --no-preview
 python -m src.main --stock --symbol sh.601398 --macro --macro-sources gdp m2 --force-refresh
 ```
 
+4. **Cleaning Data Files**
+
+The project includes a utility to easily clean data files:
+
+```bash
+# Clean all data files (with confirmation prompt)
+python -m src.clean_data --all
+
+# Clean specific data directories
+python -m src.clean_data --raw --processed
+
+# Simulate cleaning (dry run without actual deletion)
+python -m src.clean_data --all --dry-run
+
+# Clean cache files without confirmation
+python -m src.clean_data --cache --force
+
+# Advanced options
+python -m src.clean_data --all --no-gitkeep  # Also remove .gitkeep files
+```
+
 ## Using the Python API
 
 ### Stock Data Collection

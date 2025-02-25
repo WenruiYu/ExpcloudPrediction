@@ -11,7 +11,12 @@ from pathlib import Path
 from typing import Optional, Dict, List, Any, Union
 from datetime import datetime, timedelta
 
-from config import MACRO_DATA_DIR, MACRO_DATA_SOURCES, LOGGING_CONFIG, CACHE_EXPIRY_DAYS
+# Try to import using relative imports if running as a module
+try:
+    from src.config import MACRO_DATA_DIR, MACRO_DATA_SOURCES, LOGGING_CONFIG, CACHE_EXPIRY_DAYS
+except ImportError:
+    # Fall back to direct imports if running the file directly
+    from config import MACRO_DATA_DIR, MACRO_DATA_SOURCES, LOGGING_CONFIG, CACHE_EXPIRY_DAYS
 
 # Configure logging
 logging.config.dictConfig(LOGGING_CONFIG)

@@ -13,13 +13,24 @@ from typing import Optional, List, Dict, Tuple, Union, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 
-from utils import calculate_technical_indicators
-from config import (
-    START_DATE, END_DATE, DEFAULT_TICKER_BS,
-    RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR,
-    BATCH_SIZE, MAX_WORKERS, LOGGING_CONFIG,
-    CACHE_EXPIRY_DAYS
-)
+# Try to import using relative imports if running as a module
+try:
+    from src.utils import calculate_technical_indicators
+    from src.config import (
+        START_DATE, END_DATE, DEFAULT_TICKER_BS,
+        RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR,
+        BATCH_SIZE, MAX_WORKERS, LOGGING_CONFIG,
+        CACHE_EXPIRY_DAYS
+    )
+except ImportError:
+    # Fall back to direct imports if running the file directly
+    from utils import calculate_technical_indicators
+    from config import (
+        START_DATE, END_DATE, DEFAULT_TICKER_BS,
+        RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR,
+        BATCH_SIZE, MAX_WORKERS, LOGGING_CONFIG,
+        CACHE_EXPIRY_DAYS
+    )
 
 # Configure logging
 logging.config.dictConfig(LOGGING_CONFIG)

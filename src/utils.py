@@ -7,7 +7,13 @@ import ta
 import logging
 import logging.config
 from functools import lru_cache
-from config import TECHNICAL_INDICATORS_CONFIG, LOGGING_CONFIG
+
+# Try to import using relative imports if running as a module
+try:
+    from src.config import TECHNICAL_INDICATORS_CONFIG, LOGGING_CONFIG
+except ImportError:
+    # Fall back to direct imports if running the file directly
+    from config import TECHNICAL_INDICATORS_CONFIG, LOGGING_CONFIG
 
 # Configure logging
 logging.config.dictConfig(LOGGING_CONFIG)
