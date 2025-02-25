@@ -67,6 +67,15 @@ TECHNICAL_INDICATORS_CONFIG: Dict[str, int] = {
     'ichimoku_span_window': int(get_env_var('ICHIMOKU_SPAN_WINDOW', '52'))
 }
 
+# Default list of technical indicators to calculate
+DEFAULT_INDICATORS = get_env_var('DEFAULT_INDICATORS', 'all').lower().split(',')
+if 'all' in DEFAULT_INDICATORS:
+    DEFAULT_INDICATORS = [
+        "sma", "ema", "rsi", "macd", "bollinger", "atr", 
+        "stochastic", "obv", "adx", "cci", "mfi", 
+        "williams_r", "psar", "ichimoku"
+    ]
+
 # Macro data sources configuration
 MACRO_DATA_SOURCES: Dict[str, Dict[str, str]] = {
     'gdp': {

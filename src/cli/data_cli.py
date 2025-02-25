@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional, List
 try:
     from src.core.config import (
         LOGGING_CONFIG, START_DATE, END_DATE,
-        DEFAULT_TICKER_BS, MACRO_DATA_SOURCES
+        DEFAULT_TICKER_BS, MACRO_DATA_SOURCES, DEFAULT_INDICATORS
     )
     from src.data.stock_collection import StockDataCollector
     from src.data.macro_collection import MacroDataCollector
@@ -20,7 +20,7 @@ except ImportError:
     # Fall back to direct imports if running the file directly
     from ..core.config import (
         LOGGING_CONFIG, START_DATE, END_DATE,
-        DEFAULT_TICKER_BS, MACRO_DATA_SOURCES
+        DEFAULT_TICKER_BS, MACRO_DATA_SOURCES, DEFAULT_INDICATORS
     )
     from ..data.stock_collection import StockDataCollector
     from ..data.macro_collection import MacroDataCollector
@@ -110,14 +110,8 @@ def run_data_collection(args: argparse.Namespace) -> None:
     Args:
         args: Command-line arguments
     """
-    # Handle 'all' option for indicators
-    if args.indicators and 'all' in args.indicators:
-        all_indicators = [
-            "sma", "ema", "rsi", "macd", "bollinger", "atr", "stochastic",
-            "obv", "adx", "cci", "mfi", "williams_r", "psar", "ichimoku"
-        ]
-        args.indicators = all_indicators
-        logger.info(f"Using all available indicators: {', '.join(all_indicators)}")
+    # Log which indicators we're using from config
+    logger.info(f"Using indicators from config: {', '.join(args.indicators)}")
     
     # Collect stock data if requested
     if args.stock:
@@ -174,27 +168,6 @@ def main():
         default=DEFAULT_TICKER_BS,
         help=f"Stock symbol to collect (default: {DEFAULT_TICKER_BS})"
     )
-    parser.add_argument(
-        "--start-date",
-        default=START_DATE,
-        help=f"Start date for data collection (default: {START_DATE})"
-    )
-    parser.add_argument(
-        "--end-date",
-        default=END_DATE,
-        help=f"End date for data collection (default: {END_DATE})"
-    )
-    parser.add_argument(
-        "--indicators",
-        type=str,
-        nargs="+",
-        choices=[
-            "sma", "ema", "rsi", "macd", "bollinger", "atr", "stochastic",
-            "obv", "adx", "cci", "mfi", "williams_r", "psar", "ichimoku", "all"
-        ],
-        default=["sma", "ema", "rsi", "macd"],
-        help="Technical indicators to calculate (default: sma ema rsi macd). Use 'all' for all indicators."
-    )
     
     # Macro data arguments
     parser.add_argument(
@@ -202,23 +175,12 @@ def main():
         action="store_true",
         help="Collect macroeconomic data"
     )
-    parser.add_argument(
-        "--macro-sources",
-        nargs="+",
-        choices=list(MACRO_DATA_SOURCES.keys()),
-        help="Specific macro data sources to collect (default: all)"
-    )
     
-    # General arguments
+    # Essential utility option
     parser.add_argument(
         "--force-refresh",
         action="store_true",
         help="Force refresh data (ignore cache)"
-    )
-    parser.add_argument(
-        "--no-preview",
-        action="store_true",
-        help="Don't show data preview"
     )
     
     args = parser.parse_args()
@@ -227,6 +189,15 @@ def main():
     if not args.stock and not args.macro:
         args.stock = True
         args.macro = True
+    
+    # Always use indicators from config
+    args.indicators = DEFAULT_INDICATORS
+    
+    # Initialize missing args that were removed
+    args.start_date = START_DATE
+    args.end_date = END_DATE
+    args.macro_sources = None
+    args.no_preview = False
     
     # Run data collection
     run_data_collection(args)

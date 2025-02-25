@@ -20,7 +20,7 @@ try:
         START_DATE, END_DATE, DEFAULT_TICKER_BS,
         RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR,
         BATCH_SIZE, MAX_WORKERS, LOGGING_CONFIG,
-        CACHE_EXPIRY_DAYS
+        CACHE_EXPIRY_DAYS, DEFAULT_INDICATORS
     )
 except ImportError:
     # Fall back to direct imports if running the file directly
@@ -29,7 +29,7 @@ except ImportError:
         START_DATE, END_DATE, DEFAULT_TICKER_BS,
         RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR,
         BATCH_SIZE, MAX_WORKERS, LOGGING_CONFIG,
-        CACHE_EXPIRY_DAYS
+        CACHE_EXPIRY_DAYS, DEFAULT_INDICATORS
     )
 
 # Configure logging
@@ -42,6 +42,7 @@ class StockDataCollector:
     def __init__(
         self,
         symbol: str = DEFAULT_TICKER_BS,
+        data_source: str = "baostock",
         start_date: str = START_DATE,
         end_date: str = END_DATE,
         batch_size: int = BATCH_SIZE,
@@ -54,6 +55,7 @@ class StockDataCollector:
         
         Args:
             symbol: Stock symbol in BaoStock format
+            data_source: Data source to use
             start_date: Start date for data collection (YYYY-MM-DD)
             end_date: End date for data collection (YYYY-MM-DD)
             batch_size: Size of data chunks for parallel processing
@@ -62,12 +64,14 @@ class StockDataCollector:
             indicators: List of technical indicators to calculate
         """
         self.symbol = symbol
+        self.data_source = data_source
         self.start_date = start_date
         self.end_date = end_date
         self.batch_size = batch_size
         self.max_workers = max_workers
         self.cache_expiry_days = cache_expiry_days
-        self.indicators = indicators
+        # Use DEFAULT_INDICATORS from config instead of hard-coding
+        self.indicators = indicators or DEFAULT_INDICATORS
         
         # Initialize BaoStock session
         self.bs_session = None

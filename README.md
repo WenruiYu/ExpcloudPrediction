@@ -48,7 +48,7 @@ pip install -r requirements.txt
 
 ```
 ExpcloudPrediction/
-├── data/                  # Data directory
+├── data/                  # Data directory (ignored by Git)
 │   ├── cache/             # Cached data files
 │   ├── feature_store/     # HDF5 feature store
 │   ├── macro/             # Macroeconomic data
@@ -74,7 +74,14 @@ The main interface is through the command-line. The system offers several comman
 To collect stock and macroeconomic data:
 
 ```bash
-python -m src.main data --symbol sh.600519 --start 2022-01-01 --end 2023-01-15
+# Collect both stock and macro data (default behavior)
+python -m src.main data
+
+# Collect only stock data for a specific symbol
+python -m src.main data --stock --symbol sh.600519
+
+# Collect only macroeconomic data
+python -m src.main data --macro
 ```
 
 ### Generating Features
@@ -82,7 +89,11 @@ python -m src.main data --symbol sh.600519 --start 2022-01-01 --end 2023-01-15
 To generate features from collected data:
 
 ```bash
-python -m src.main features --symbol sh.600519 --start 2022-01-01 --end 2023-01-15 --include-time --include-lag --include-rolling
+# Generate all feature types (time-based, lag, rolling)
+python -m src.main features --symbol sh.600519
+
+# Generate specific feature types
+python -m src.main features --symbol sh.600519 --include-time --include-lag
 ```
 
 ### Running Complete Pipeline
@@ -90,11 +101,18 @@ python -m src.main features --symbol sh.600519 --start 2022-01-01 --end 2023-01-
 To run the entire pipeline (data collection, feature generation, and model input preparation):
 
 ```bash
-python -m src.main all --symbol sh.600519 --start 2022-01-01 --end 2023-01-15
+python -m src.main all --symbol sh.600519
 ```
 
 ### Command-line Options
 
+#### For Data Collection:
+- `--stock`: Collect stock data
+- `--symbol`: Stock symbol (default: sh.600519)
+- `--macro`: Collect macroeconomic data
+- `--force-refresh`: Force refresh data (ignore cache)
+
+#### For Feature Generation:
 - `--symbol`: Stock symbol (default: sh.600519)
 - `--start-date`: Start date for data collection (YYYY-MM-DD)
 - `--end-date`: End date for data collection (YYYY-MM-DD)
@@ -109,6 +127,20 @@ python -m src.main all --symbol sh.600519 --start 2022-01-01 --end 2023-01-15
 - `--force-refresh`: Force refresh data (ignore cache)
 - `--output-dir`: Output directory for model-ready data
 
+### Cleaning Data Directories
+
+To clean up data directories:
+
+```bash
+# Clean all data directories with confirmation prompt
+python -m src.main clean
+
+# Preview cleaning without removing files (dry run)
+python -m src.main clean --dry-run
+```
+
+The cleaner automatically cleans all data directories while preserving the directory structure. It removes all files except directory placeholders.
+
 ## Feature Pipeline Details
 
 The feature pipeline handles:
@@ -117,6 +149,15 @@ The feature pipeline handles:
 2. **Time Features**: Extracts time-based features (day of week, month, quarter, etc.)
 3. **Lag Features**: Creates lagged versions of features
 4. **Rolling Features**: Computes rolling statistics (mean, std, min, max)
+
+## Data Storage
+
+The system stores data in multiple formats:
+
+1. **Raw Data**: Original data saved in the `data/raw/` directory with naming convention `raw_macro_{source_id}_{date}.csv`
+2. **Processed Data**: Cleaned and processed data stored in `data/processed/` and `data/macro/`
+3. **Feature Store**: Features saved in HDF5 format in `data/feature_store/`
+4. **Model-Ready Data**: Prepared sequences stored in `data/model_ready/`
 
 ## Output
 
@@ -128,6 +169,16 @@ The pipeline generates model-ready data in the `data/model_ready/` directory:
 - `metadata.json`: Metadata including column information, normalization parameters, and date ranges
 
 The prepared data consists of sequences suitable for LSTM or other time series models, with shape (samples, sequence_length, features).
+
+## Macroeconomic Data
+
+The system collects and processes several macroeconomic indicators:
+
+1. **GDP**: Quarterly Gross Domestic Product and year-over-year growth rate
+2. **CPI**: Monthly Consumer Price Index
+3. **M2**: Monthly money supply metrics (M2, M1, M0) and their year-over-year growth rates
+
+All date data is stored in the "yyyy-mm-dd" format for consistency.
 
 ## Troubleshooting
 

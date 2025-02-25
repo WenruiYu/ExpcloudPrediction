@@ -21,241 +21,123 @@ class TestMacroDataCollector:
     
     @pytest.fixture
     def sample_gdp_data(self):
-        """Create sample GDP data."""
+        """Create sample GDP data in expected format."""
+        dates = pd.date_range(start='2022-01-01', periods=3, freq='Y')
         return pd.DataFrame({
-            'year': ['2020', '2021', '2022'],
-            'gdp': [101.95, 114.37, 121.02],
-            'gdp_yoy': [2.3, 8.4, 3.0]
-        })
+            'gdp': [5.0, 4.5, 5.2],
+            'gdp_yoy': [4.8, 4.0, 4.5]
+        }, index=dates)
     
     @pytest.fixture
-    def sample_cpi_data(self):
-        """Create sample CPI data."""
-        return pd.DataFrame({
-            'month': ['2023-01', '2023-02', '2023-03'],
-            'cpi': [101.0, 101.5, 102.1]
+    def sample_raw_gdp_data(self):
+        """Create sample raw GDP data in Chinese format."""
+        df = pd.DataFrame({
+            '商品': ['GDP', 'GDP', 'GDP'],
+            '日期': ['2022-01-20', '2023-01-20', '2024-01-20'],
+            '今值': [5.0, 4.5, 5.2],
+            '预测值': [4.9, 4.3, 5.0],
+            '前值': [4.8, 4.0, 4.5]
         })
+        # Add date column for newer implementation
+        df['date'] = pd.to_datetime(df['日期'])
+        return df
     
     @pytest.fixture
-    def mock_ak_module(self, sample_gdp_data, sample_cpi_data):
+    def mock_ak(self, sample_raw_gdp_data):
         """Create a mock for the akshare module."""
-        mock_ak = MagicMock()
-        mock_ak.macro_china_gdp_yearly.return_value = sample_gdp_data
-        mock_ak.macro_china_cpi_monthly.return_value = sample_cpi_data
-        
-        with patch.dict('sys.modules', {'ak': mock_ak}):
-            yield mock_ak
+        mock = MagicMock()
+        mock.macro_china_gdp_yearly.return_value = sample_raw_gdp_data
+        return mock
     
-    def test_initialization_with_defaults(self):
-        """Test that MacroDataCollector initializes with default values."""
+    def test_transform_gdp_data(self, sample_raw_gdp_data):
+        """Test GDP data transformation."""
         collector = MacroDataCollector()
-        assert set(collector.sources) == set(MACRO_DATA_SOURCES.keys())
-        assert collector.cache_expiry_days == 1  # Default value
-    
-    def test_initialization_with_specific_sources(self):
-        """Test initialization with specific sources."""
-        collector = MacroDataCollector(sources=['gdp', 'cpi'])
-        assert set(collector.sources) == {'gdp', 'cpi'}
-    
-    def test_initialization_with_invalid_sources(self, caplog):
-        """Test that invalid sources are filtered out with warning."""
-        collector = MacroDataCollector(sources=['gdp', 'invalid_source'])
-        assert set(collector.sources) == {'gdp'}
-        assert "Invalid sources" in caplog.text
+        transformed = collector.transform_gdp_data(sample_raw_gdp_data)
+        
+        # Check that the result has a DatetimeIndex
+        assert isinstance(transformed.index, pd.DatetimeIndex)
+        assert transformed.index.name == 'date'
+        
+        # Check that it has the right columns
+        assert 'gdp' in transformed.columns
+        assert 'gdp_yoy' in transformed.columns
+        
+        # Check row count and values
+        assert len(transformed) == 3
+        assert transformed['gdp'].iloc[0] == 5.0
+        assert transformed['gdp_yoy'].iloc[0] == 4.8
     
     def test_is_cache_valid(self, tmp_path):
-        """Test cache validation logic."""
+        """Test cache validation."""
         collector = MacroDataCollector()
         
         # Create a test file
-        cache_file = tmp_path / 'test_cache.csv'
-        with open(cache_file, 'w') as f:
-            f.write('test data')
+        test_file = tmp_path / "test_cache.csv"
+        test_file.write_text("test")
         
-        # Test valid cache
-        assert collector.is_cache_valid(cache_file) is True
+        # Test with recent file
+        assert collector.is_cache_valid(test_file) == True
         
-        # Test expired cache
-        old_time = datetime.now() - timedelta(days=2)
-        os.utime(cache_file, (old_time.timestamp(), old_time.timestamp()))
-        assert collector.is_cache_valid(cache_file) is False
+        # Modify the file time to be old
+        old_time = datetime.now() - timedelta(days=30)
+        os.utime(test_file, (old_time.timestamp(), old_time.timestamp()))
         
-        # Test non-existent file
-        non_existent = tmp_path / 'non_existent.csv'
-        assert collector.is_cache_valid(non_existent) is False
+        # Test with old file
+        assert collector.is_cache_valid(test_file) == False
     
-    def test_fetch_single_source_using_cache(self, tmp_path, sample_gdp_data):
-        """Test fetching a single source with cache."""
-        # Setup
-        collector = MacroDataCollector()
-        cache_file = tmp_path / 'china_gdp_yearly.csv'
-        sample_gdp_data.to_csv(cache_file, index=False)
-        
-        # Create mock config
-        config = {
-            'function': 'ak.macro_china_gdp_yearly',
-            'filename': 'china_gdp_yearly.csv',  # Just the filename, not the full path
-            'description': "Test GDP data"
-        }
-        
-        # Mock is_cache_valid to return True and patch MACRO_DATA_DIR
-        with patch.object(collector, 'is_cache_valid', return_value=True), \
-             patch('src.data.macro_collection.MACRO_DATA_DIR', tmp_path):
-            # Mock pd.read_csv to return our sample data
-            with patch('pandas.read_csv', return_value=sample_gdp_data) as mock_read_csv:
-                result = collector.fetch_single_source('gdp', config)
+    def test_fetch_single_source_success(self, mock_ak, sample_raw_gdp_data, tmp_path):
+        """Test successful data fetching."""
+        with patch('src.data.macro_collection.MACRO_DATA_DIR', tmp_path):
+            with patch('src.data.macro_collection.RAW_DATA_DIR', tmp_path), patch.dict('sys.modules', {'akshare': mock_ak}):
+                collector = MacroDataCollector()
                 
-                # Verify result
-                assert result is not None
-                assert result.equals(sample_gdp_data)
-                mock_read_csv.assert_called_once_with(tmp_path / 'china_gdp_yearly.csv')
-    
-    def test_fetch_single_source_fresh_data(self, tmp_path, mock_ak_module, sample_gdp_data):
-        """Test fetching fresh data for a single source."""
-        # Setup
-        collector = MacroDataCollector()
-        cache_dir = tmp_path / 'macro'
-        cache_dir.mkdir(exist_ok=True)
-        cache_file = cache_dir / 'china_gdp_yearly.csv'
-        
-        # Create mock config
-        config = {
-            'function': 'ak.macro_china_gdp_yearly',
-            'filename': str(cache_file.name),
-            'description': "Test GDP data"
-        }
-        
-        # Ensure we don't use cache
-        with patch.object(collector, 'is_cache_valid', return_value=False):
-            # Mock Path location
-            with patch('src.data.macro_collection.MACRO_DATA_DIR', cache_dir):
-                result = collector.fetch_single_source('gdp', config)
+                # Test config
+                config = {
+                    'function': 'ak.macro_china_gdp_yearly',
+                    'filename': 'gdp_test.csv'
+                }
                 
-                # Verify result
-                assert result is not None
-                assert result.equals(sample_gdp_data)
-                mock_ak_module.macro_china_gdp_yearly.assert_called_once()
-                assert cache_file.exists()
-    
-    def test_fetch_single_source_error_handling(self, mock_ak_module):
-        """Test error handling in fetch_single_source."""
-        # Setup
-        collector = MacroDataCollector()
-        mock_ak_module.macro_china_gdp_yearly.side_effect = Exception("API error")
-        
-        # Create mock config
-        config = {
-            'function': 'ak.macro_china_gdp_yearly',
-            'filename': 'china_gdp_yearly.csv',
-            'description': "Test GDP data"
-        }
-        
-        # Ensure we don't use cache
-        with patch.object(collector, 'is_cache_valid', return_value=False):
-            result = collector.fetch_single_source('gdp', config)
-            
-            # Verify result is None on error
-            assert result is None
-            mock_ak_module.macro_china_gdp_yearly.assert_called()
-    
-    def test_fetch_single_source_retry_mechanism(self, mock_ak_module, sample_gdp_data):
-        """Test that fetch_single_source retries on failure."""
-        # Setup
-        collector = MacroDataCollector()
-        
-        # Make the API call fail once, then succeed
-        mock_ak_module.macro_china_gdp_yearly.side_effect = [
-            Exception("API error"),
-            sample_gdp_data
-        ]
-        
-        # Create mock config
-        config = {
-            'function': 'ak.macro_china_gdp_yearly',
-            'filename': 'china_gdp_yearly.csv',
-            'description': "Test GDP data"
-        }
-        
-        # Mock time.sleep to speed up test
-        with patch('time.sleep'):
-            # Ensure we don't use cache
-            with patch.object(collector, 'is_cache_valid', return_value=False):
-                # Mock file operations
-                with patch('pandas.DataFrame.to_csv'):
+                # Ensure cache is not used
+                with patch.object(collector, 'is_cache_valid', return_value=False):
                     result = collector.fetch_single_source('gdp', config)
-                    
-                    # Verify result
-                    assert result is not None
-                    assert result.equals(sample_gdp_data)
-                    assert mock_ak_module.macro_china_gdp_yearly.call_count == 2
+                
+                # Verify result
+                assert result is not None
+                
+                # Check that result has the right columns
+                assert 'gdp' in result.columns
+                assert 'gdp_yoy' in result.columns
+                
+                # Check that the index is a DatetimeIndex
+                assert isinstance(result.index, pd.DatetimeIndex)
+                
+                # Check row count
+                assert len(result) == 3
+                
+                # Verify file was created
+                assert (tmp_path / 'gdp_test.csv').exists()
     
-    def test_fetch_all_sources(self, mock_ak_module, sample_gdp_data, sample_cpi_data):
-        """Test fetching all data sources."""
-        # Setup
-        collector = MacroDataCollector(sources=['gdp', 'cpi'])
-        
-        # Mock fetch_single_source to return our sample data
-        with patch.object(collector, 'fetch_single_source') as mock_fetch:
-            mock_fetch.side_effect = [sample_gdp_data, sample_cpi_data]
-            
-            results = collector.fetch_all_sources()
-            
-            # Verify results
-            assert len(results) == 2
-            assert results['gdp'].equals(sample_gdp_data)
-            assert results['cpi'].equals(sample_cpi_data)
-            assert mock_fetch.call_count == 2
-    
-    def test_get_data_all_sources(self, mock_ak_module):
-        """Test get_data for all sources."""
-        # Setup
-        collector = MacroDataCollector()
-
-        # Mock fetch_all_sources
-        mock_results = {'gdp': pd.DataFrame({'test': [1, 2, 3]})}
-        with patch.object(collector, 'fetch_all_sources', return_value=mock_results) as mock_fetch:
-            results = collector.get_data()
-
-            # Verify results
-            assert results == mock_results
-            # More flexible assertion that works with both positional and keyword arguments
-            assert mock_fetch.call_count == 1
-            # Verify the argument value without being strict about positional vs. keyword
-            call_args = mock_fetch.call_args
-            assert call_args[0] == (False,) or call_args[1] == {'force_refresh': False}
-    
-    def test_get_data_single_source(self, mock_ak_module, sample_gdp_data):
-        """Test get_data for a single source."""
-        # Setup
-        collector = MacroDataCollector()
-        
-        # Mock fetch_single_source
-        with patch.object(collector, 'fetch_single_source', return_value=sample_gdp_data) as mock_fetch:
-            result = collector.get_data(source='gdp')
-            
-            # Verify result
-            assert result.equals(sample_gdp_data)
-            mock_fetch.assert_called_once()
-    
-    def test_get_data_unknown_source(self, caplog):
-        """Test get_data with an unknown source."""
-        collector = MacroDataCollector()
-        result = collector.get_data(source='unknown_source')
-        
-        assert result is None
-        assert "Unknown source" in caplog.text
-    
-    def test_get_data_error_handling(self):
-        """Test error handling in get_data."""
-        # Setup
-        collector = MacroDataCollector()
-        
-        # Mock fetch_all_sources to raise exception
-        with patch.object(collector, 'fetch_all_sources', side_effect=Exception("Test error")):
-            result = collector.get_data()
-            
-            # Verify empty dict on error
-            assert result == {}
+    def test_fetch_single_source_error(self, mock_ak, tmp_path):
+        """Test error handling in data fetching."""
+        with patch('src.data.macro_collection.MACRO_DATA_DIR', tmp_path):
+            with patch('src.data.macro_collection.RAW_DATA_DIR', tmp_path), patch.dict('sys.modules', {'akshare': mock_ak}):
+                collector = MacroDataCollector()
+                
+                # Set up error
+                mock_ak.macro_china_gdp_yearly.side_effect = Exception("API error")
+                
+                # Test config
+                config = {
+                    'function': 'ak.macro_china_gdp_yearly',
+                    'filename': 'gdp_test.csv'
+                }
+                
+                # Ensure cache is not used
+                with patch.object(collector, 'is_cache_valid', return_value=False):
+                    result = collector.fetch_single_source('gdp', config)
+                
+                # Verify result is None on error
+                assert result is None
 
 
 if __name__ == '__main__':

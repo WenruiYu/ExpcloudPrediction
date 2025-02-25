@@ -26,7 +26,7 @@ except ImportError:
 logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
 
-def clean_directory(directory: Path, keep_gitkeep: bool = True, dry_run: bool = False) -> int:
+def clean_directory(directory: Path, keep_gitkeep: bool = True, dry_run: bool = False, recursive: bool = False) -> int:
     """
     Clean all files in a directory while preserving the directory structure.
     
@@ -34,6 +34,7 @@ def clean_directory(directory: Path, keep_gitkeep: bool = True, dry_run: bool = 
         directory: The directory to clean
         keep_gitkeep: Whether to preserve .gitkeep files
         dry_run: If True, only simulate deletion
+        recursive: If True, also clean subdirectories
         
     Returns:
         Number of files removed
@@ -43,6 +44,8 @@ def clean_directory(directory: Path, keep_gitkeep: bool = True, dry_run: bool = 
         return 0
         
     count = 0
+    
+    # First clean files in the current directory
     for item in directory.glob('*'):
         if item.is_file():
             # Skip .gitkeep files if requested
@@ -55,32 +58,25 @@ def clean_directory(directory: Path, keep_gitkeep: bool = True, dry_run: bool = 
                 item.unlink()
                 logger.info(f"Removed: {item}")
             count += 1
+    
+    # If recursive, also clean all subdirectories
+    if recursive:
+        for subdir in directory.glob('*/'):
+            if subdir.is_dir():
+                # Skip .git directories
+                if '.git' in str(subdir):
+                    continue
+                    
+                logger.info(f"Cleaning subdirectory: {subdir}")
+                count += clean_directory(subdir, keep_gitkeep, dry_run, recursive=True)
                 
     return count
 
-def clean_data_directories(
-    raw: bool = False,
-    processed: bool = False,
-    cache: bool = False,
-    macro: bool = False,
-    feature_store: bool = False,
-    model_ready: bool = False,
-    all_dirs: bool = False,
-    keep_gitkeep: bool = True,
-    dry_run: bool = False
-) -> dict:
+def clean_data_directories(dry_run: bool = False) -> dict:
     """
-    Clean specified data directories.
+    Clean all data directories.
     
     Args:
-        raw: Clean raw data directory
-        processed: Clean processed data directory
-        cache: Clean cache directory
-        macro: Clean macro data directory
-        feature_store: Clean feature store directory
-        model_ready: Clean model-ready data directory
-        all_dirs: Clean all data directories
-        keep_gitkeep: Whether to preserve .gitkeep files
         dry_run: If True, only simulate deletion
         
     Returns:
@@ -88,29 +84,20 @@ def clean_data_directories(
     """
     results = {}
     
-    # Determine which directories to clean
-    dirs_to_clean = []
-    
-    if all_dirs or raw:
-        dirs_to_clean.append(('raw', RAW_DATA_DIR))
-    if all_dirs or processed:
-        dirs_to_clean.append(('processed', PROCESSED_DATA_DIR))
-    if all_dirs or cache:
-        dirs_to_clean.append(('cache', CACHE_DIR))
-    if all_dirs or macro:
-        dirs_to_clean.append(('macro', MACRO_DATA_DIR))
-    if all_dirs or feature_store:
-        dirs_to_clean.append(('feature_store', FEATURE_STORE_DIR))
-    if all_dirs or model_ready:
-        dirs_to_clean.append(('model_ready', MODEL_READY_DIR))
-        
-    if not dirs_to_clean:
-        logger.warning("No directories selected for cleaning. Use --all or specify directories.")
-        return results
+    # All directories to clean with appropriate settings
+    dirs_to_clean = [
+        ('raw', RAW_DATA_DIR, False),         # (name, path, recursive)
+        ('processed', PROCESSED_DATA_DIR, False),
+        ('cache', CACHE_DIR, False),
+        ('macro', MACRO_DATA_DIR, False),
+        ('feature_store', FEATURE_STORE_DIR, True),  # Use recursive for feature_store
+        ('model_ready', MODEL_READY_DIR, False)
+    ]
         
     # Clean each directory
-    for name, directory in dirs_to_clean:
-        count = clean_directory(directory, keep_gitkeep, dry_run)
+    for name, directory, recursive in dirs_to_clean:
+        logger.info(f"Cleaning directory: {name}")
+        count = clean_directory(directory, keep_gitkeep=True, dry_run=dry_run, recursive=recursive)
         results[name] = count
         
     return results
@@ -118,105 +105,30 @@ def clean_data_directories(
 def main():
     """Main entry point for the data cleaning utility."""
     parser = argparse.ArgumentParser(
-        description="Clean data files while preserving directory structure."
+        description="Clean all data directories while preserving directory structure."
     )
     
-    parser.add_argument(
-        '--raw',
-        action='store_true',
-        help="Clean raw data directory"
-    )
-    parser.add_argument(
-        '--processed',
-        action='store_true',
-        help="Clean processed data directory"
-    )
-    parser.add_argument(
-        '--cache',
-        action='store_true',
-        help="Clean cache directory"
-    )
-    parser.add_argument(
-        '--macro',
-        action='store_true',
-        help="Clean macro data directory"
-    )
-    parser.add_argument(
-        '--feature-store',
-        action='store_true',
-        help="Clean feature store directory"
-    )
-    parser.add_argument(
-        '--model-ready',
-        action='store_true',
-        help="Clean model-ready data directory"
-    )
-    parser.add_argument(
-        '--all',
-        action='store_true',
-        help="Clean all data directories"
-    )
-    parser.add_argument(
-        '--no-gitkeep',
-        action='store_true',
-        help="Also remove .gitkeep files"
-    )
+    # Keep only the dry-run option for safety
     parser.add_argument(
         '--dry-run',
         action='store_true',
         help="Simulate cleaning without actually removing files"
     )
-    parser.add_argument(
-        '--force',
-        action='store_true',
-        help="Skip confirmation prompt"
-    )
     
     args = parser.parse_args()
     
-    # Get confirmation unless forced
-    if not args.force and not args.dry_run:
-        dirs = []
-        if args.all:
-            dirs.append("ALL data directories")
-        else:
-            if args.raw:
-                dirs.append("raw")
-            if args.processed:
-                dirs.append("processed")
-            if args.cache:
-                dirs.append("cache")
-            if args.macro:
-                dirs.append("macro")
-            if args.feature_store:
-                dirs.append("feature_store")
-            if args.model_ready:
-                dirs.append("model_ready")
-                
-        if not dirs:
-            logger.warning("No directories selected for cleaning. Use --all or specify directories.")
-            return
-            
-        confirmation = input(f"Are you sure you want to clean {', '.join(dirs)}? [y/N]: ")
+    # Get confirmation unless it's a dry run
+    if not args.dry_run:
+        confirmation = input(f"Are you sure you want to clean ALL data directories? [y/N]: ")
         if confirmation.lower() not in ['y', 'yes']:
             logger.info("Operation cancelled by user.")
             return
     
-    # Perform cleaning
+    # Perform cleaning of ALL directories
     operation = "Simulating" if args.dry_run else "Cleaning"
-    logger.info(f"{operation} data directories...")
+    logger.info(f"{operation} all data directories...")
     
-    results = clean_data_directories(
-        raw=args.raw,
-        processed=args.processed,
-        cache=args.cache,
-        macro=args.macro,
-        feature_store=args.feature_store,
-        model_ready=args.model_ready,
-        all_dirs=args.all,
-        keep_gitkeep=not args.no_gitkeep,
-        dry_run=args.dry_run
-    )
+    results = clean_data_directories(dry_run=args.dry_run)
     
     # Print summary
     if results:

@@ -32,13 +32,8 @@ env/
 .env.*
 !.env.example
 
-# Data files (keep directory structure with .gitkeep)
-data/*
-!data/.gitkeep
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-!data/cache/.gitkeep
-!data/macro/.gitkeep
+# Data files
+data/
 
 # Logs
 logs/
@@ -51,6 +46,7 @@ logs/
 *.iws
 *.ipr
 .idea_modules/
+.idea/vcs.xml
 
 # VS Code
 .vscode/
@@ -94,4 +90,3 @@ Thumbs.db
 # Project specific
 *.bak
 *.tmp 
-.idea/vcs.xml
