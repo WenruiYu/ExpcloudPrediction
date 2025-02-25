@@ -33,24 +33,53 @@ cp .env.example .env
 # Edit .env file as needed
 ```
 
-2. **Collect Stock Data**
+2. **Run the Application**
 
 ```bash
-# Run from command line
-python -m src.main --stock --symbol sh.600519
+# Run with default settings (collects both stock and macro data)
+python -m src.main
 
-# For ICBC stock data
-python -m src.main --stock --symbol sh.601398
+# Run with specific options
+python -m src.main --stock --macro
 ```
 
-3. **Collect Macroeconomic Data**
+3. **Command-line Options**
 
 ```bash
-# Run from command line
+# Stock Data Options:
+# ------------------
+# Collect stock data for Moutai (default)
+python -m src.main --stock
+
+# Collect stock data for ICBC
+python -m src.main --stock --symbol sh.601398
+
+# Specify date range
+python -m src.main --stock --start-date 2020-01-01 --end-date 2023-01-01
+
+# Calculate specific technical indicators
+python -m src.main --stock --indicators sma ema rsi macd bollinger atr stochastic
+
+# Macro Data Options:
+# ------------------
+# Collect all macroeconomic data
 python -m src.main --macro
 
-# Specific sources
+# Collect specific macro data sources
 python -m src.main --macro --macro-sources gdp cpi
+
+# General Options:
+# --------------
+# Force refresh (ignore cache)
+python -m src.main --force-refresh
+
+# Hide data preview
+python -m src.main --no-preview
+
+# Combined Options:
+# ---------------
+# Collect both stock and macro data with custom settings
+python -m src.main --stock --symbol sh.601398 --macro --macro-sources gdp m2 --force-refresh
 ```
 
 ## Using the Python API
