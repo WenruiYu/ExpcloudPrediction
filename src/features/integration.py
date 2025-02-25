@@ -209,6 +209,7 @@ class DataIntegrator:
                     'frequency': FREQUENCY_DAILY,
                     'source_ids': ['stock_price'],
                     'description': f"Stock data for {symbol}",
+                    'creation_date': datetime.now().isoformat(),
                     'parameters': {
                         'symbol': symbol,
                         'start_date': start_date,
@@ -276,6 +277,7 @@ class DataIntegrator:
                         'frequency': frequency,
                         'source_ids': [source_id],
                         'description': f"Macro data for {source_id}",
+                        'creation_date': datetime.now().isoformat(),
                         'parameters': {
                             'force_refresh': force_refresh
                         }
@@ -321,24 +323,36 @@ class DataIntegrator:
             # Collect stock data if needed
             stock_feature_id = f"stock_{symbol.replace('.', '_')}"
             if force_refresh or stock_feature_id not in self.feature_store.list_features():
-                self.collect_and_register_stock_data(
+                stock_data = self.collect_and_register_stock_data(
                     symbol=symbol,
                     start_date=start_date,
                     end_date=end_date,
                     force_refresh=force_refresh
                 )
+                if stock_data is None:
+                    logger.error(f"Failed to collect stock data for {symbol}")
+                    return None
             
             # Collect macro data if needed
+            macro_data_available = False
             if macro_sources:
                 if force_refresh or not all(f"macro_{s}" in self.feature_store.list_features() for s in macro_sources):
-                    self.collect_and_register_macro_data(
+                    macro_results = self.collect_and_register_macro_data(
                         sources=macro_sources,
                         force_refresh=force_refresh
                     )
+                    if macro_results and any(data is not None for data in macro_results.values()):
+                        macro_data_available = True
+                        # Filter out failed sources
+                        macro_sources = [s for s, data in macro_results.items() if data is not None]
+                        if not macro_sources:
+                            logger.warning("All macro data collection failed. Using stock data only.")
+                else:
+                    macro_data_available = True
             
             # Prepare source IDs
             source_ids = ['stock_price']
-            if macro_sources:
+            if macro_sources and macro_data_available:
                 source_ids.extend(macro_sources)
             
             # Generate aligned feature
@@ -348,14 +362,18 @@ class DataIntegrator:
                 frequency=frequency,
                 start_date=start_date,
                 end_date=end_date,
-                description=f"Aligned feature for {symbol} with macro data",
+                description=f"Aligned feature for {symbol}" + 
+                            (f" with macro data ({', '.join(macro_sources)})" if macro_sources and macro_data_available else " without macro data"),
                 symbol=symbol
             )
             
             # Get the feature
             aligned_data = self.feature_store.get_feature(feature_id)
             
-            logger.info(f"Created aligned feature '{feature_id}' with {len(aligned_data)} rows")
+            if aligned_data is not None:
+                logger.info(f"Created aligned feature '{feature_id}' with {len(aligned_data)} rows")
+            else:
+                logger.error(f"Failed to create aligned feature '{feature_id}'")
             
             return aligned_data
             

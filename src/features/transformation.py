@@ -36,6 +36,44 @@ except ImportError:
 # Configure logging
 logger = logging.getLogger(__name__)
 
+# Frequency mapping to pandas frequency strings
+FREQUENCY_MAP = {
+    FREQUENCY_DAILY: 'D',
+    FREQUENCY_WEEKLY: 'W',
+    FREQUENCY_MONTHLY: 'M',
+    FREQUENCY_QUARTERLY: 'Q',
+    FREQUENCY_YEARLY: 'Y'
+}
+
+class MetadataHandler:
+    """Simple handler for source metadata."""
+    
+    def __init__(self):
+        """Initialize with basic source metadata."""
+        # Source type mapping
+        self.source_types = {
+            'stock_price': 'stock_price',
+            'gdp': 'macro',
+            'cpi': 'macro',
+            'm2': 'macro'
+        }
+        
+        # Source frequency mapping
+        self.source_frequencies = {
+            'stock_price': FREQUENCY_DAILY,
+            'gdp': FREQUENCY_QUARTERLY,
+            'cpi': FREQUENCY_MONTHLY,
+            'm2': FREQUENCY_MONTHLY
+        }
+    
+    def get_source_type(self, source_id: str) -> str:
+        """Get the type of a source."""
+        return self.source_types.get(source_id, 'unknown')
+    
+    def get_source_frequency(self, source_id: str) -> str:
+        """Get the frequency of a source."""
+        return self.source_frequencies.get(source_id)
+
 class DataTransformer:
     """Handles transformation and alignment of data with different frequencies."""
     
@@ -52,14 +90,8 @@ class DataTransformer:
         self.target_frequency = target_frequency
         self.data_registry = {}  # Store loaded dataframes
         
-        # Create a mapping from frequency to pandas frequency string
-        self.freq_map = {
-            FREQUENCY_DAILY: 'D',
-            FREQUENCY_WEEKLY: 'W',
-            FREQUENCY_MONTHLY: 'M',
-            FREQUENCY_QUARTERLY: 'Q',
-            FREQUENCY_YEARLY: 'Y'
-        }
+        # Initialize the metadata handler
+        self.metadata_handler = MetadataHandler()
         
         logger.info(f"Initialized DataTransformer with target frequency: {target_frequency}")
     
@@ -99,146 +131,123 @@ class DataTransformer:
     
     def load_data_source(self, source_id: str, **kwargs) -> pd.DataFrame:
         """
-        Load a data source into the registry.
+        Load data for a specific source.
         
         Args:
-            source_id: Identifier for the data source
-            **kwargs: Additional parameters for file path construction
+            source_id: Source identifier
+            **kwargs: Additional arguments for data source parameters
             
         Returns:
-            DataFrame containing the data
+            DataFrame with source data
         """
-        # Check if already loaded
-        if source_id in self.data_registry:
-            logger.info(f"Using cached data for source '{source_id}'")
-            return self.data_registry[source_id]
+        # Get source type
+        source_type = self.metadata_handler.get_source_type(source_id)
         
-        # Get metadata
-        metadata = get_source_metadata(source_id)
-        
-        # Get file path
-        file_path = self._get_data_path(source_id, **kwargs)
-        
-        if not file_path.exists():
-            raise FileNotFoundError(f"Data file not found at {file_path}")
-        
-        logger.info(f"Loading data from {file_path}")
-        
-        # Load data
-        try:
-            # Determine date column
-            date_column = metadata.get('date_column')
-            
-            # Read CSV
-            data = pd.read_csv(file_path)
-            
-            # Convert date column to datetime and set as index
-            if date_column and date_column in data.columns:
-                data[date_column] = pd.to_datetime(data[date_column])
-                data.set_index(date_column, inplace=True)
-            elif date_column:
-                logger.warning(f"Date column '{date_column}' not found in {file_path}")
-            
-            # Basic data validation
-            if data.empty:
-                logger.warning(f"Empty dataset loaded from {file_path}")
+        if source_type == 'stock_price':
+            # Load processed stock data
+            symbol = kwargs.get('symbol')
+            if not symbol:
+                logger.error("Symbol required for stock data")
                 return pd.DataFrame()
             
-            # Check required fields
-            required_fields = metadata.get('required_fields', [])
-            missing_fields = [field for field in required_fields if field not in data.columns]
-            if missing_fields:
-                logger.warning(f"Missing required fields in {file_path}: {missing_fields}")
+            filepath = os.path.join(PROCESSED_DATA_DIR, f"{symbol}_processed_stock_data.csv")
+            logger.info(f"Loading data from {filepath}")
             
-            # Store in registry
-            self.data_registry[source_id] = data
-            logger.info(f"Loaded {len(data)} rows for source '{source_id}'")
+            if not os.path.exists(filepath):
+                logger.error(f"File not found: {filepath}")
+                return pd.DataFrame()
             
-            return data
+            try:
+                data = pd.read_csv(filepath)
+                # Set date as index
+                if 'date' in data.columns:
+                    data['date'] = pd.to_datetime(data['date'])
+                    data.set_index('date', inplace=True)
+                return data
+            except Exception as e:
+                logger.error(f"Error loading stock data: {e}")
+                return pd.DataFrame()
+        
+        elif source_id in ['gdp', 'cpi', 'm2']:
+            # Load macro data
+            file_type = 'yearly' if source_id == 'gdp' else 'monthly'
+            filepath = os.path.join(MACRO_DATA_DIR, f"china_{source_id}_{file_type}.csv")
+            logger.info(f"Loading data from {filepath}")
             
-        except Exception as e:
-            logger.error(f"Error loading data for source '{source_id}': {e}", exc_info=True)
+            if not os.path.exists(filepath):
+                logger.error(f"File not found: {filepath}")
+                return pd.DataFrame()
+            
+            try:
+                data = pd.read_csv(filepath)
+                
+                # Set date as index
+                for date_col in ['date', 'year', 'month']:
+                    if date_col in data.columns:
+                        data[date_col] = pd.to_datetime(data[date_col])
+                        data.set_index(date_col, inplace=True)
+                        break
+                
+                # Create date index if none found
+                if not isinstance(data.index, pd.DatetimeIndex):
+                    logger.warning(f"No date column found in {filepath}, creating date index")
+                    freq = 'Q' if source_id == 'gdp' else 'M'
+                    date_range = pd.date_range(start='2000-01-01', periods=len(data), freq=freq)
+                    data.index = date_range
+                
+                return data
+            except Exception as e:
+                logger.error(f"Error loading macro data: {e}")
+                return pd.DataFrame()
+        
+        else:
+            logger.error(f"Unknown source type: {source_type}")
             return pd.DataFrame()
     
     def align_to_frequency(self, data: pd.DataFrame, source_id: str) -> pd.DataFrame:
         """
-        Align data to target frequency based on metadata rules.
+        Align data to target frequency.
         
         Args:
-            data: DataFrame to align
-            source_id: Identifier for the data source
+            data: Input DataFrame with datetime index
+            source_id: Source identifier
             
         Returns:
-            Aligned DataFrame
+            DataFrame with aligned data
         """
-        if data.empty:
-            return pd.DataFrame()
+        # Ensure the index is a DatetimeIndex
+        if not isinstance(data.index, pd.DatetimeIndex):
+            logger.warning(f"Converting index to DatetimeIndex for source '{source_id}'")
+            data.index = pd.to_datetime(data.index)
         
-        metadata = get_source_metadata(source_id)
-        source_freq = metadata['frequency']
+        # Get source and target frequencies
+        source_freq = self.metadata_handler.get_source_frequency(source_id)
+        if not source_freq:
+            logger.warning(f"No frequency information for source '{source_id}'. Assuming no alignment needed.")
+            return data
         
-        # If frequencies match, no resampling needed
         if source_freq == self.target_frequency:
+            # No frequency alignment needed
             logger.info(f"No frequency alignment needed for source '{source_id}'")
             return data
         
         logger.info(f"Aligning {source_id} from {source_freq} to {self.target_frequency}")
         
-        # Get resampling method
-        from src.features.metadata import metadata_registry
-        method = metadata_registry.get_frequency_mapping(source_id, self.target_frequency)
+        # Convert to pandas frequency string
+        source_pd_freq = self._to_pandas_freq(source_freq)
+        pd_target_freq = self._to_pandas_freq(self.target_frequency)
         
-        if not method:
-            logger.warning(f"No mapping method specified for {source_id} to {self.target_frequency}")
-            method = 'ffill'  # Default to forward fill
-        
-        # Convert frequencies to pandas frequency strings
-        pd_target_freq = self.freq_map[self.target_frequency]
-        
-        # Handle upsampling (e.g., monthly to daily)
-        if VALID_FREQUENCIES.index(self.target_frequency) > VALID_FREQUENCIES.index(source_freq):
+        # Resample based on relative frequencies
+        if self._is_higher_frequency(self.target_frequency, source_freq):
+            # Upsampling (e.g., monthly to daily)
             logger.info(f"Upsampling {source_id} data to {self.target_frequency}")
-            
-            # Create date range for the index
-            start_date = data.index.min()
-            end_date = data.index.max()
-            
-            # Create a new index with the target frequency
-            new_index = pd.date_range(start=start_date, end=end_date, freq=pd_target_freq)
-            
-            # Reindex the data
-            resampled = data.reindex(new_index)
-            
-            # Apply the specified method to fill gaps
-            if method == 'ffill':
-                resampled = resampled.ffill()
-            elif method == 'bfill':
-                resampled = resampled.bfill()
-            else:
-                logger.warning(f"Unsupported upsampling method '{method}' for source '{source_id}'")
-                resampled = resampled.ffill()
-                
-        # Handle downsampling (e.g., daily to monthly)
+            resampled = data.resample(pd_target_freq).asfreq()
+            resampled = resampled.ffill()  # Forward fill missing values
         else:
+            # Downsampling (e.g., daily to monthly)
             logger.info(f"Downsampling {source_id} data to {self.target_frequency}")
-            
-            if method == 'first':
-                resampled = data.resample(pd_target_freq).first()
-            elif method == 'last':
-                resampled = data.resample(pd_target_freq).last()
-            elif method == 'mean':
-                resampled = data.resample(pd_target_freq).mean()
-            elif method == 'sum':
-                resampled = data.resample(pd_target_freq).sum()
-            elif method == 'min':
-                resampled = data.resample(pd_target_freq).min()
-            elif method == 'max':
-                resampled = data.resample(pd_target_freq).max()
-            else:
-                logger.warning(f"Unsupported downsampling method '{method}' for source '{source_id}'")
-                resampled = data.resample(pd_target_freq).last()
+            resampled = data.resample(pd_target_freq).last()  # Use last value in period
         
-        logger.info(f"Aligned {len(data)} rows to {len(resampled)} rows for source '{source_id}'")
         return resampled
     
     def create_aligned_dataset(
@@ -335,72 +344,90 @@ class DataTransformer:
     def prepare_model_inputs(
         self, 
         aligned_data: pd.DataFrame, 
-        target_column: str, 
-        feature_columns: Optional[List[str]] = None,
+        target_column: str = 'close_stock_price',
+        feature_columns: List[str] = None,
         sequence_length: int = 30,
-        forecast_horizon: int = 1,
+        forecast_horizon: int = 5,
         train_ratio: float = 0.7,
         val_ratio: float = 0.15,
         test_ratio: float = 0.15,
         normalize: bool = True
-    ) -> Dict[str, Union[pd.DataFrame, np.ndarray]]:
+    ) -> Dict[str, np.ndarray]:
         """
-        Prepare model inputs from aligned data.
+        Prepare aligned data for model training.
         
         Args:
-            aligned_data: DataFrame with aligned data sources
-            target_column: Column to use as prediction target
-            feature_columns: Columns to use as features (if None, use all except target)
-            sequence_length: Number of time steps to use for sequence inputs
-            forecast_horizon: Number of time steps to forecast
-            train_ratio: Proportion of data to use for training
-            val_ratio: Proportion of data to use for validation
-            test_ratio: Proportion of data to use for testing
+            aligned_data: Aligned feature data
+            target_column: Target column name
+            feature_columns: List of feature columns (None for all)
+            sequence_length: Input sequence length
+            forecast_horizon: Forecast horizon
+            train_ratio: Training data ratio
+            val_ratio: Validation data ratio
+            test_ratio: Test data ratio
             normalize: Whether to normalize data
             
         Returns:
             Dictionary with model inputs
         """
         if aligned_data.empty:
-            logger.warning("Empty aligned dataset, cannot prepare model inputs")
-            return {}
-        
-        if target_column not in aligned_data.columns:
-            logger.error(f"Target column '{target_column}' not found in aligned dataset")
+            logger.warning("Empty aligned data, cannot prepare model inputs")
             return {}
         
         logger.info(f"Preparing model inputs with sequence length {sequence_length} and forecast horizon {forecast_horizon}")
         
-        # Select feature columns
-        if feature_columns is None:
-            feature_columns = [col for col in aligned_data.columns if col != target_column]
-        else:
-            # Validate feature columns
-            missing_cols = [col for col in feature_columns if col not in aligned_data.columns]
-            if missing_cols:
-                logger.warning(f"Missing feature columns: {missing_cols}")
-                feature_columns = [col for col in feature_columns if col in aligned_data.columns]
-        
         # Prepare data
         data = aligned_data.copy()
         
+        # Identify numeric columns only
+        numeric_columns = data.select_dtypes(include=['number']).columns.tolist()
+        
+        # Find the target column with potential suffixes
+        actual_target_column = None
+        target_candidates = [
+            target_column,
+            f"{target_column}_primary",
+            f"{target_column}_secondary"
+        ]
+        
+        for candidate in target_candidates:
+            if candidate in numeric_columns:
+                actual_target_column = candidate
+                break
+        
+        if actual_target_column is None:
+            logger.error(f"Target column '{target_column}' or its variants not found or not numeric")
+            return {}
+        
+        logger.info(f"Using '{actual_target_column}' as the target column")
+        
+        # Select feature columns (numeric only)
+        if feature_columns is None:
+            feature_columns = [col for col in numeric_columns if col != actual_target_column]
+        else:
+            # Filter to keep only numeric columns that exist
+            feature_columns = [col for col in feature_columns if col in numeric_columns]
+            
+        logger.info(f"Using {len(feature_columns)} numeric feature columns")
+        
         # Shift target for forecasting
         if forecast_horizon > 0:
-            data[f'{target_column}_target'] = data[target_column].shift(-forecast_horizon)
-            data = data.dropna(subset=[f'{target_column}_target'])
+            data[f'{actual_target_column}_target'] = data[actual_target_column].shift(-forecast_horizon)
+            data = data.dropna(subset=[f'{actual_target_column}_target'])
         else:
-            data[f'{target_column}_target'] = data[target_column]
+            data[f'{actual_target_column}_target'] = data[actual_target_column]
         
         # Normalize data
         if normalize:
             scaler_dict = {}
-            for col in feature_columns + [f'{target_column}_target']:
-                mean = data[col].mean()
-                std = data[col].std()
-                if std == 0:
-                    std = 1  # Avoid division by zero
-                data[col] = (data[col] - mean) / std
-                scaler_dict[col] = {'mean': mean, 'std': std}
+            for col in feature_columns + [f'{actual_target_column}_target']:
+                if col in numeric_columns:  # Only normalize numeric columns
+                    mean = data[col].mean()
+                    std = data[col].std()
+                    if std == 0:
+                        std = 1  # Avoid division by zero
+                    data[col] = (data[col] - mean) / std
+                    scaler_dict[col] = {'mean': mean, 'std': std}
         else:
             scaler_dict = None
         
@@ -411,7 +438,7 @@ class DataTransformer:
         
         for i in range(len(data) - sequence_length):
             x_seq = data[feature_columns].iloc[i:i+sequence_length].values
-            y_seq = data[f'{target_column}_target'].iloc[i+sequence_length-1]
+            y_seq = data[f'{actual_target_column}_target'].iloc[i+sequence_length-1]
             
             x_sequences.append(x_seq)
             y_sequences.append(y_seq)
@@ -446,7 +473,7 @@ class DataTransformer:
             'val_dates': [dates[i] for i in val_indices],
             'test_dates': [dates[i] for i in test_indices],
             'feature_columns': feature_columns,
-            'target_column': target_column,
+            'target_column': actual_target_column,
             'scaler_dict': scaler_dict,
             'sequence_length': sequence_length,
             'forecast_horizon': forecast_horizon
@@ -456,6 +483,16 @@ class DataTransformer:
                    f"{len(val_indices)} validation samples, and {len(test_indices)} test samples")
         
         return result
+
+    def _to_pandas_freq(self, freq: str) -> str:
+        """Convert frequency string to pandas frequency string."""
+        return FREQUENCY_MAP.get(freq)
+        
+    def _is_higher_frequency(self, freq1: str, freq2: str) -> bool:
+        """Check if freq1 is higher frequency than freq2."""
+        if freq1 not in VALID_FREQUENCIES or freq2 not in VALID_FREQUENCIES:
+            return False
+        return VALID_FREQUENCIES.index(freq1) < VALID_FREQUENCIES.index(freq2)
 
 # Utility functions
 def create_time_features(data: pd.DataFrame) -> pd.DataFrame:
@@ -470,14 +507,19 @@ def create_time_features(data: pd.DataFrame) -> pd.DataFrame:
     """
     df = data.copy()
     
-    # Extract datetime components
-    df['dayofweek'] = df.index.dayofweek
-    df['quarter'] = df.index.quarter
-    df['month'] = df.index.month
-    df['year'] = df.index.year
-    df['dayofyear'] = df.index.dayofyear
-    df['dayofmonth'] = df.index.day
-    df['weekofyear'] = df.index.isocalendar().week
+    # Ensure index is DatetimeIndex
+    if not isinstance(df.index, pd.DatetimeIndex):
+        logger.warning("DataFrame index is not DatetimeIndex, attempting to convert")
+        df.index = pd.to_datetime(df.index)
+    
+    # Extract datetime components and explicitly convert to int64 to avoid UInt32/UInt type issues
+    df['dayofweek'] = df.index.dayofweek.astype('int64')
+    df['quarter'] = df.index.quarter.astype('int64')
+    df['month'] = df.index.month.astype('int64')
+    df['year'] = df.index.year.astype('int64')
+    df['dayofyear'] = df.index.dayofyear.astype('int64')
+    df['dayofmonth'] = df.index.day.astype('int64')
+    df['weekofyear'] = df.index.isocalendar().week.astype('int64')
     
     # Cyclical encoding for periodic features
     df['dayofweek_sin'] = np.sin(df['dayofweek'] * (2 * np.pi / 7))

@@ -10,15 +10,16 @@ This module provides a centralized feature store that:
 
 import os
 import json
-import hashlib
 import pandas as pd
 import numpy as np
-import h5py
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any, Tuple
 from datetime import datetime
 import logging
 import shutil
+
+# Import tables (pytables) for HDF5 storage
+import tables
 
 # Try to import using relative imports if running as a module
 try:
@@ -123,7 +124,7 @@ class FeatureStore:
         if version is None:
             version = metadata['latest_version']
         
-        # Construct file path
+        # Construct file path for HDF5 storage
         file_path = self.base_dir / frequency / f"{feature_id}_v{version}.h5"
         
         return file_path
@@ -258,9 +259,8 @@ class FeatureStore:
         # Create parent directory if needed
         file_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Store data in HDF5 format
+        # Store data using HDF5 format
         try:
-            # Store feature data using HDF5 format
             with pd.HDFStore(file_path, mode='w') as store:
                 store.put('data', data, format='table')
             
@@ -272,7 +272,8 @@ class FeatureStore:
                 'columns': len(data.columns),
                 'start_date': data.index.min().isoformat(),
                 'end_date': data.index.max().isoformat(),
-                'stored_date': datetime.now().isoformat()
+                'stored_date': datetime.now().isoformat(),
+                'storage_format': 'hdf5'
             }
             
             # Update any additional metadata
@@ -324,7 +325,7 @@ class FeatureStore:
             logger.error(f"Feature file not found at {file_path}")
             return pd.DataFrame()
         
-        # Load data
+        # Load data from HDF5
         try:
             with pd.HDFStore(file_path, mode='r') as store:
                 data = store['data']
@@ -475,7 +476,7 @@ class FeatureStore:
         # Merge all features
         result = feature_dfs[0].copy()
         for df in feature_dfs[1:]:
-            result = result.join(df, how='outer')
+            result = result.join(df, how='outer', lsuffix='_primary', rsuffix='_secondary')
         
         # Fill missing values
         result = result.ffill().bfill()

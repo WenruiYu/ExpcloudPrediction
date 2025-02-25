@@ -22,6 +22,14 @@ except ImportError:
 logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
 
+# Check if akshare is available
+AKSHARE_AVAILABLE = False
+try:
+    import akshare as ak
+    AKSHARE_AVAILABLE = True
+except ImportError:
+    logger.warning("akshare package is not installed. Macroeconomic data collection will not work. Install with: pip install akshare")
+
 class MacroDataCollector:
     """Class for collecting and managing macroeconomic data."""
     
@@ -47,6 +55,10 @@ class MacroDataCollector:
             self.sources = [src for src in self.sources if src in MACRO_DATA_SOURCES]
             
         logger.info(f"Initialized MacroDataCollector with sources: {self.sources}")
+        
+        # Warn if akshare is not available
+        if not AKSHARE_AVAILABLE:
+            logger.warning("akshare package is not installed. Macroeconomic data collection will not work. Install with: pip install akshare")
     
     def is_cache_valid(self, file_path: Path) -> bool:
         """
@@ -98,12 +110,27 @@ class MacroDataCollector:
             except Exception as e:
                 logger.warning(f"Error reading cached file {file_path}: {e}")
         
+        # Check if akshare is available before attempting to fetch data
+        if not AKSHARE_AVAILABLE:
+            logger.error(f"akshare package is not installed. Cannot fetch {source_name} data.")
+            return None
+            
         logger.info(f"Fetching {config['description']}...")
         
         try:
             # Dynamically import and call the function
             module_name, func_name = config['function'].split('.')
-            module = importlib.import_module(module_name)
+            
+            # Use the global ak module if available, otherwise try to import
+            if module_name == 'ak' and AKSHARE_AVAILABLE:
+                module = ak
+            else:
+                try:
+                    module = importlib.import_module(module_name)
+                except ImportError as e:
+                    logger.error(f"Could not import module {module_name}: {e}")
+                    return None
+                    
             func = getattr(module, func_name)
             
             # Implement retry mechanism

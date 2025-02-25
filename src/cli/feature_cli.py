@@ -196,16 +196,37 @@ def run_feature_pipeline(args):
     # Determine feature ID for the aligned dataset
     base_feature_id = f"{args.symbol.replace('.', '_')}_with_macro"
     
-    # Create aligned features
-    aligned_data = integrator.create_aligned_features(
-        feature_id=base_feature_id,
-        symbol=args.symbol,
-        macro_sources=args.macro_sources,
-        start_date=args.start_date,
-        end_date=args.end_date,
-        frequency=args.frequency,
-        force_refresh=args.force_refresh
-    )
+    # Check if any macro data was collected
+    has_macro_data = bool(macro_data and any(v is not None and not getattr(v, 'empty', True) for v in macro_data.values()))
+    
+    # Create features with appropriate macro data inclusion
+    try:
+        if has_macro_data:
+            # Create features with macro data
+            aligned_data = integrator.create_aligned_features(
+                feature_id=base_feature_id,
+                symbol=args.symbol,
+                macro_sources=args.macro_sources,
+                start_date=args.start_date,
+                end_date=args.end_date,
+                frequency=args.frequency,
+                force_refresh=args.force_refresh
+            )
+        else:
+            # Create stock-only features
+            logger.warning("No macro data was collected successfully. Creating stock-only features.")
+            aligned_data = integrator.create_aligned_features(
+                feature_id=base_feature_id.replace("_with_macro", "_only"),
+                symbol=args.symbol,
+                macro_sources=None,
+                start_date=args.start_date,
+                end_date=args.end_date,
+                frequency=args.frequency,
+                force_refresh=args.force_refresh
+            )
+    except Exception as e:
+        logger.error(f"Failed to create features: {e}")
+        return
     
     if aligned_data is None or aligned_data.empty:
         logger.error("Failed to create aligned features, aborting pipeline")
