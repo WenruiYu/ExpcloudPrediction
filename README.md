@@ -13,9 +13,14 @@ This project provides an end-to-end pipeline for stock price prediction:
 ## Prerequisites
 
 - Python 3.8+
-- PyTables (tables package)
-- pandas, numpy
-- BaoStock API access
+- Core dependencies:
+  - pandas, numpy
+  - PyTables (tables package) for HDF5 storage
+- Data collection:
+  - BaoStock API (for stock data)
+  - AkShare (for macroeconomic indicators)
+- Technical analysis:
+  - ta (Technical Analysis library)
 
 ## Installation
 

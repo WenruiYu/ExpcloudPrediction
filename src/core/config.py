@@ -17,10 +17,10 @@ RAW_DATA_DIR = DATA_DIR / 'raw'
 PROCESSED_DATA_DIR = DATA_DIR / 'processed'
 CACHE_DIR = DATA_DIR / 'cache'
 MACRO_DATA_DIR = DATA_DIR / 'macro'
+MODEL_READY_DIR = DATA_DIR / 'model_ready'
 
-# Create all directories
-REQUIRED_DIRS: List[Path] = [RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR, MACRO_DATA_DIR]
-for directory in REQUIRED_DIRS:
+# Create required directories if they don't exist
+for directory in [RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR, MACRO_DATA_DIR, MODEL_READY_DIR]:
     try:
         directory.mkdir(parents=True, exist_ok=True)
     except PermissionError:

@@ -4,21 +4,27 @@ import os
 import argparse
 import shutil
 import logging
+import logging.config
 from pathlib import Path
 
 # Try to import using relative imports if running as a module
 try:
-    from src.core.config import DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR, MACRO_DATA_DIR, LOGGING_CONFIG
+    from src.core.config import (
+        DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, 
+        CACHE_DIR, MACRO_DATA_DIR, MODEL_READY_DIR, LOGGING_CONFIG
+    )
+    from src.features.store import FEATURE_STORE_DIR
 except ImportError:
     # Fall back to direct imports if running the file directly
-    from ..core.config import DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR, MACRO_DATA_DIR, LOGGING_CONFIG
+    from ..core.config import (
+        DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, 
+        CACHE_DIR, MACRO_DATA_DIR, MODEL_READY_DIR, LOGGING_CONFIG
+    )
+    from ..features.store import FEATURE_STORE_DIR
 
-# Configure basic logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger("clean_data")
+# Configure logging
+logging.config.dictConfig(LOGGING_CONFIG)
+logger = logging.getLogger(__name__)
 
 def clean_directory(directory: Path, keep_gitkeep: bool = True, dry_run: bool = False) -> int:
     """
@@ -57,6 +63,8 @@ def clean_data_directories(
     processed: bool = False,
     cache: bool = False,
     macro: bool = False,
+    feature_store: bool = False,
+    model_ready: bool = False,
     all_dirs: bool = False,
     keep_gitkeep: bool = True,
     dry_run: bool = False
@@ -69,6 +77,8 @@ def clean_data_directories(
         processed: Clean processed data directory
         cache: Clean cache directory
         macro: Clean macro data directory
+        feature_store: Clean feature store directory
+        model_ready: Clean model-ready data directory
         all_dirs: Clean all data directories
         keep_gitkeep: Whether to preserve .gitkeep files
         dry_run: If True, only simulate deletion
@@ -89,6 +99,10 @@ def clean_data_directories(
         dirs_to_clean.append(('cache', CACHE_DIR))
     if all_dirs or macro:
         dirs_to_clean.append(('macro', MACRO_DATA_DIR))
+    if all_dirs or feature_store:
+        dirs_to_clean.append(('feature_store', FEATURE_STORE_DIR))
+    if all_dirs or model_ready:
+        dirs_to_clean.append(('model_ready', MODEL_READY_DIR))
         
     if not dirs_to_clean:
         logger.warning("No directories selected for cleaning. Use --all or specify directories.")
@@ -128,6 +142,16 @@ def main():
         help="Clean macro data directory"
     )
     parser.add_argument(
+        '--feature-store',
+        action='store_true',
+        help="Clean feature store directory"
+    )
+    parser.add_argument(
+        '--model-ready',
+        action='store_true',
+        help="Clean model-ready data directory"
+    )
+    parser.add_argument(
         '--all',
         action='store_true',
         help="Clean all data directories"
@@ -164,14 +188,18 @@ def main():
                 dirs.append("cache")
             if args.macro:
                 dirs.append("macro")
+            if args.feature_store:
+                dirs.append("feature_store")
+            if args.model_ready:
+                dirs.append("model_ready")
                 
         if not dirs:
-            print("No directories selected for cleaning. Use --all or specify directories.")
+            logger.warning("No directories selected for cleaning. Use --all or specify directories.")
             return
             
         confirmation = input(f"Are you sure you want to clean {', '.join(dirs)}? [y/N]: ")
         if confirmation.lower() not in ['y', 'yes']:
-            print("Operation cancelled by user.")
+            logger.info("Operation cancelled by user.")
             return
     
     # Perform cleaning
@@ -183,6 +211,8 @@ def main():
         processed=args.processed,
         cache=args.cache,
         macro=args.macro,
+        feature_store=args.feature_store,
+        model_ready=args.model_ready,
         all_dirs=args.all,
         keep_gitkeep=not args.no_gitkeep,
         dry_run=args.dry_run
